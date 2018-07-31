@@ -82,16 +82,16 @@ elseif(UNIX)
    set(VORPALINE_PLATFORM Linux64-gcc-dynamic)
 endif()
 ExternalProject_Add(geogram
-       URL https://github.com/alicevision/geogram/archive/v1.6.0.tar.gz
+       URL https://github.com/alicevision/geogram/archive/v1.6.6.tar.gz
        PREFIX ${BUILD_DIR}
        BUILD_IN_SOURCE 0
        BUILD_ALWAYS 0
        SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/geogram
        BINARY_DIR ${BUILD_DIR}/geogram_build
-       INSTALL_DIR ${BUILD_DIR}/geogram_build
+       INSTALL_DIR ${BUILD_DIR}/geogram_install
        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DVORPALINE_PLATFORM=${VORPALINE_PLATFORM} -DGEOGRAM_WITH_HLBFGS=OFF -DGEOGRAM_WITH_TETGEN=OFF -DGEOGRAM_WITH_GRAPHICS=OFF -DGEOGRAM_WITH_EXPLORAGRAM=OFF -DGEOGRAM_WITH_LUA=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
        )
-set(GEOGRAM_CMAKE_FLAGS -DGEOGRAM_INSTALL_PREFIX=${BUILD_DIR}/geogram_build -DGEOGRAM_INCLUDE_DIR=${BUILD_DIR}/geogram_build/include/geogram1)
+set(GEOGRAM_CMAKE_FLAGS -DGEOGRAM_INSTALL_PREFIX=${BUILD_DIR}/geogram_install -DGEOGRAM_INCLUDE_DIR=${BUILD_DIR}/geogram_install/include/geogram1)
 
 # Add Cuda
 if(AV_USE_CUDA AND AV_BUILD_CUDA)
@@ -132,16 +132,32 @@ ExternalProject_Add(eigen
        )
 set(EIGEN_CMAKE_FLAGS -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEIGEN3_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3 -DEIGEN_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3)
 
+ExternalProject_Add(lapack
+       URL http://www.netlib.org/lapack/lapack-3.8.0.tar.gz
+       PREFIX ${BUILD_DIR}
+       BUILD_IN_SOURCE 0
+       BUILD_ALWAYS 0
+       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/lapack
+       BINARY_DIR ${BUILD_DIR}/lapack_build
+       INSTALL_DIR ${BUILD_DIR}/lapack_build
+       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
+       )
+
+# set(SUITESPARSE_INTERNAL_MAKE_CMD LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BUILD_DIR}/lapack_build/lib:${BUILD_DIR}/lapack_build/lib64 make BLAS="-L${BUILD_DIR}/lapack_build/lib64 -lblas -lgfortran" LAPACK="-L${BUILD_DIR}/lapack_build/lib64 -llapack")
+set(BLAS_LIBRARIES ${BUILD_DIR}/lapack_build/lib64/libblas.so)
+set(SUITESPARSE_INTERNAL_MAKE_CMD LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BUILD_DIR}/lapack_build/lib:${BUILD_DIR}/lapack_build/lib64 make BLAS="${BUILD_DIR}/lapack_build/lib64/libblas.so" LAPACK="${BUILD_DIR}/lapack_build/lib64/liblapack.so")
 ExternalProject_Add(suitesparse
-       URL https://github.com/jluttine/suitesparse/archive/v5.2.0.tar.gz
+       URL https://github.com/jluttine/suitesparse/archive/v4.5.6.tar.gz
        PREFIX ${BUILD_DIR}
        BUILD_IN_SOURCE 0
        BUILD_ALWAYS 0
        SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/suitesparse
-       BINARY_DIR ${BUILD_DIR}/suitesparse_build
+       BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/suitesparse
        INSTALL_DIR ${BUILD_DIR}/suitesparse_build
        CONFIGURE_COMMAND ""
-       BUILD_COMMAND make install INSTALL=<INSTALL_DIR>
+       BUILD_COMMAND   cd <BINARY_DIR> && ${SUITESPARSE_INTERNAL_MAKE_CMD}
+       INSTALL_COMMAND cd <BINARY_DIR> && ${SUITESPARSE_INTERNAL_MAKE_CMD} install INSTALL=<INSTALL_DIR>
+       DEPENDS lapack
        )
 
 # Add ceres-solver: A Nonlinear Least Squares Minimizer
@@ -149,11 +165,12 @@ ExternalProject_Add(ceres
        URL https://github.com/ceres-solver/ceres-solver/archive/1.13.0.tar.gz
        PREFIX ${BUILD_DIR}
        BUILD_IN_SOURCE 0
-       BUILD_ALWAYS 0
+       BUILD_ALWAYS 1
        SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/ceres-solver
        BINARY_DIR ${BUILD_DIR}/ceres_build
        INSTALL_DIR ${BUILD_DIR}/ceres_build
-       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEIGEN_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3 -DMINIGLOG=ON -DBUILD_EXAMPLES:BOOL=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
+       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DCMAKE_PREFIX_PATH=${BUILD_DIR}/suitesparse_build -DBLAS_LIBRARIES=${BLAS_LIBRARIES}-DSUITESPARSE:BOOL=ON -DLAPACK:BOOL=ON -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEIGEN_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3 -DMINIGLOG=ON -DBUILD_EXAMPLES:BOOL=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
+       BUILD_COMMAND plop
        DEPENDS eigen suitesparse
        )
 # Test 32/64 bits
@@ -171,21 +188,23 @@ else()
 endif()
 
 # Add IlmBase
-ExternalProject_Add(ilmbase
-       GIT_REPOSITORY https://github.com/alicevision/openexr
-       GIT_TAG develop_compatibility_gxx4
-       PREFIX ${BUILD_DIR}
-       BUILD_IN_SOURCE 0
-       BUILD_ALWAYS 0
-       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openexr
-       BINARY_DIR ${BUILD_DIR}/ilmbase_build
-       INSTALL_DIR ${BUILD_DIR}/openexr_build # Note: Need to install in the same folder than OpenEXR to get valid include paths
-       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>/IlmBase
-       )
-set(ILMBASE_CMAKE_FLAGS -DILMBASE_ROOT=${BUILD_DIR}/openexr_build -DILMBASE_INCLUDE_PATH=${BUILD_DIR}/openexr_build/include)
+#set(ILMBASE_TARGET ilmbase)
+#ExternalProject_Add(${ILMBASE_TARGET}
+#       GIT_REPOSITORY https://github.com/alicevision/openexr
+#       GIT_TAG develop_compatibility_gxx4
+#       PREFIX ${BUILD_DIR}
+#       BUILD_IN_SOURCE 0
+#       BUILD_ALWAYS 0
+#       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openexr
+#       BINARY_DIR ${BUILD_DIR}/ilmbase_build
+#       INSTALL_DIR ${BUILD_DIR}/openexr_build # Note: Need to install in the same folder than OpenEXR to get valid include paths
+#       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>/IlmBase
+#       )
+#set(ILMBASE_CMAKE_FLAGS -DILMBASE_ROOT=${BUILD_DIR}/openexr_build -DILMBASE_INCLUDE_PATH=${BUILD_DIR}/openexr_build/include)
 
 # Add OpenEXR
-ExternalProject_Add(openexr
+#set(OPENEXR_TARGET openexr)
+#ExternalProject_Add(${OPENEXR_TARGET}
        # URL https://github.com/openexr/openexr/archive/v2.2.1.tar.gz
        # The release 2.2.1 has troubles with C++17, which breaks compilation with recent compilers.
        # The problem has been fixed https://github.com/openexr/openexr/issues/235
@@ -194,18 +213,18 @@ ExternalProject_Add(openexr
        # Use the latest commit with g++4.X compatibility
        # GIT_TAG 74b5c1dc2dfbdce74987a57f5e011dc711f9ca65
        # Finally use a custom version for a cmake fix
-       GIT_REPOSITORY https://github.com/alicevision/openexr
-       GIT_TAG develop_compatibility_gxx4
-       PREFIX ${BUILD_DIR}
-       BUILD_IN_SOURCE 0
-       BUILD_ALWAYS 0
-       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openexr
-       BINARY_DIR ${BUILD_DIR}/openexr_build
-       INSTALL_DIR ${BUILD_DIR}/openexr_build
-       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DILMBASE_PACKAGE_PREFIX=${BUILD_DIR}/openexr_build -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> <SOURCE_DIR>/OpenEXR
-       DEPENDS ilmbase
-       )
-set(OPENEXR_CMAKE_FLAGS -DOPENEXR_ROOT=${BUILD_DIR}/openexr_build -DOPENEXR_INCLUDE_PATH=${BUILD_DIR}/openexr_build/include)
+#       GIT_REPOSITORY https://github.com/alicevision/openexr
+#       GIT_TAG develop_compatibility_gxx4
+#       PREFIX ${BUILD_DIR}
+#       BUILD_IN_SOURCE 0
+#       BUILD_ALWAYS 0
+#       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openexr
+#       BINARY_DIR ${BUILD_DIR}/openexr_build
+#       INSTALL_DIR ${BUILD_DIR}/openexr_build
+#       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DILMBASE_PACKAGE_PREFIX=${BUILD_DIR}/openexr_build -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> <SOURCE_DIR>/OpenEXR
+#       DEPENDS ${ILMBASE_TARGET}
+#       )
+#set(OPENEXR_CMAKE_FLAGS -DOPENEXR_ROOT=${BUILD_DIR}/openexr_build -DOPENEXR_INCLUDE_PATH=${BUILD_DIR}/openexr_build/include)
 
 # Add LibTiff
 ExternalProject_Add(tiff
@@ -273,38 +292,40 @@ ExternalProject_Add(boost
 set(BOOST_CMAKE_FLAGS -DBOOST_ROOT=${BUILD_DIR}/boost_build)
 
 # Add OpenImageIO
-ExternalProject_Add(openimageio
-       URL https://github.com/OpenImageIO/oiio/archive/Release-1.8.11.tar.gz
-       PREFIX ${BUILD_DIR}
-       BUILD_IN_SOURCE 0
-       BUILD_ALWAYS 0
-       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openimageio
-       BINARY_DIR ${BUILD_DIR}/openimageio_build
-       INSTALL_DIR ${BUILD_DIR}/openimageio_build
-       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DCMAKE_PREFIX_PATH="${BUILD_DIR}/png_build;${BUILD_DIR}/turbojpeg_build" -DBOOST_ROOT=${BUILD_DIR}/boost_build -DILMBASE_HOME=${BUILD_DIR}/openexr_build -DOPENEXR_HOME=${BUILD_DIR}/openexr_build -DTIFF_INCLUDE_DIR=${BUILD_DIR}/tiff_build/include -DTIFF_LIBRARIES=${BUILD_DIR}/tiff_build/lib/libtiff.so ${PNG_CMAKE_FLAGS} ${JPEG_CMAKE_FLAGS} -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR> -DUSE_PYTHON=OFF -DUSE_OPENCV=OFF -DUSE_OPENGL=OFF
-       DEPENDS boost openexr tiff ${PNG_TARGET} ${JPEG_TARGET}
-       )
+#set(OPENIMAGEIO_TARGET openimageio)
+#ExternalProject_Add(${OPENIMAGEIO_TARGET}
+#       URL https://github.com/OpenImageIO/oiio/archive/Release-1.8.11.tar.gz
+#       PREFIX ${BUILD_DIR}
+#       BUILD_IN_SOURCE 0
+#       BUILD_ALWAYS 0
+#       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openimageio
+#       BINARY_DIR ${BUILD_DIR}/openimageio_build
+#       INSTALL_DIR ${BUILD_DIR}/openimageio_build
+#       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DCMAKE_PREFIX_PATH="${BUILD_DIR}/png_build;${BUILD_DIR}/turbojpeg_build" -DBOOST_ROOT=${BUILD_DIR}/boost_build -DILMBASE_HOME=${BUILD_DIR}/openexr_build -DOPENEXR_HOME=${BUILD_DIR}/openexr_build -DTIFF_INCLUDE_DIR=${BUILD_DIR}/tiff_build/include -DTIFF_LIBRARIES=${BUILD_DIR}/tiff_build/lib/libtiff.so ${PNG_CMAKE_FLAGS} ${JPEG_CMAKE_FLAGS} -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR> -DUSE_PYTHON=OFF -DUSE_OPENCV=OFF -DUSE_OPENGL=OFF
+#       DEPENDS boost ${OPENEXR_TARGET} tiff ${PNG_TARGET} ${JPEG_TARGET}
+#       )
 # TODO: Raw, openjpeg
 #  -DLibRaw_INCLUDE_DIR=$LIBRAW_INCLUDE_DIR
 #  -DOPENJPEG_INCLUDE_DIR=$OPENJPEG_INCLUDE_DIR/openjpeg-2.0 -DOPENJPEG_OPENJP2_LIBRARIES=$OPENJPEG_OPENJP2_LIBRARIES
-set(OPENIMAGEIO_CMAKE_FLAGS -DOPENIMAGEIO_LIBRARY_DIR_HINTS=${BUILD_DIR}/openimageio_build -DOPENIMAGEIO_INCLUDE_DIR_HINTS=${BUILD_DIR}/openimageio_build)
+#set(OPENIMAGEIO_CMAKE_FLAGS -DOPENIMAGEIO_LIBRARY_DIR_HINTS=${BUILD_DIR}/openimageio_build -DOPENIMAGEIO_INCLUDE_DIR_HINTS=${BUILD_DIR}/openimageio_build)
 
 # Add Alembic: I/O for Point Cloud and Cameras
-ExternalProject_Add(alembic
-       URL https://github.com/alembic/alembic/archive/1.7.5.tar.gz
-       PREFIX ${BUILD_DIR}
-       BUILD_IN_SOURCE 0
-       BUILD_ALWAYS 0
-       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/alembic
-       BINARY_DIR ${BUILD_DIR}/alembic_build
-       INSTALL_DIR ${BUILD_DIR}/alembic_build
-       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} ${ILMBASE_CMAKE_FLAGS} -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
-       DEPENDS boost ilmbase
-       )
-set(ALEMBIC_CMAKE_FLAGS -DAlembic_DIR:PATH=${BUILD_DIR}/alembic_build/lib/cmake/Alembic)
+#set(ALEMBIC_TARGET alembic)
+#ExternalProject_Add(${ALEMBIC_TARGET}
+#       URL https://github.com/alembic/alembic/archive/1.7.5.tar.gz
+#       PREFIX ${BUILD_DIR}
+#       BUILD_IN_SOURCE 0
+#       BUILD_ALWAYS 0
+#       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/alembic
+#       BINARY_DIR ${BUILD_DIR}/alembic_build
+#       INSTALL_DIR ${BUILD_DIR}/alembic_build
+#       CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} ${ILMBASE_CMAKE_FLAGS} -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
+#       DEPENDS boost ${ILMBASE_TARGET}
+#       )
+#set(ALEMBIC_CMAKE_FLAGS -DAlembic_DIR:PATH=${BUILD_DIR}/alembic_build/lib/cmake/Alembic)
 
-set(AV_DEPS ${JPEG_TARGET} ${PNG_TARGET} boost openimageio openexr alembic geogram ${CUDA_TARGET} ceres)
-set(AV_DEPS_CMAKE_PREFIX_PATH "${BUILD_DIR}/boost_build;${BUILD_DIR}/openimageio_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/alembic_build;${BUILD_DIR}/geogram_build;${BUILD_DIR}/cuda_build;${BUILD_DIR}/ceres_build/lib64/cmake/Ceres;${BUILD_DIR}/alembic_build/lib/cmake/Alembic")
+set(AV_DEPS ${JPEG_TARGET} ${PNG_TARGET} boost ${OPENIMAGEIO_TARGET} ${OPENEXR_TARGET} ${ALEMBIC_TARGET} geogram ${CUDA_TARGET} ceres)
+set(AV_DEPS_CMAKE_PREFIX_PATH "${BUILD_DIR}/boost_build;${BUILD_DIR}/openimageio_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/alembic_build;${BUILD_DIR}/geogram_install;${BUILD_DIR}/cuda_build;${BUILD_DIR}/ceres_build/lib64/cmake/Ceres;${BUILD_DIR}/alembic_build/lib/cmake/Alembic")
 
 ExternalProject_Add(aliceVision
        PREFIX ${CMAKE_CURRENT_SOURCE_DIR}
@@ -314,7 +335,7 @@ ExternalProject_Add(aliceVision
        BINARY_DIR ${BUILD_DIR}/aliceVision_build
        INSTALL_DIR ${BUILD_DIR}/aliceVision_build
        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DALICEVISION_ROOT=${ALICEVISION_ROOT} -DALICEVISION_USE_ALEMBIC=ON -DMINIGLOG=ON -DALICEVISION_USE_OPENCV=OFF -DALICEVISION_USE_OPENGV=OFF -DALICEVISION_USE_CUDA=${AV_USE_CUDA} -DALICEVISION_BUILD_DOC=OFF -DALICEVISION_BUILD_EXAMPLES=OFF ${EIGEN_CMAKE_FLAGS} ${ILMBASE_CMAKE_FLAGS} ${OPENIMAGEIO_CMAKE_FLAGS} ${OPENEXR_CMAKE_FLAGS} ${BOOST_CMAKE_FLAGS} ${ALEMBIC_CMAKE_FLAGS} ${GEOGRAM_CMAKE_FLAGS} ${CERES_CMAKE_FLAGS} ${CUDA_CMAKE_FLAGS} -DALICEVISION_BUILD_SHARED=ON -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
-       DEPENDS boost ceres eigen alembic openimageio geogram ${CUDA_TARGET}
+       DEPENDS boost ceres eigen ${ALEMBIC_TARGET} ${OPENIMAGEIO_TARGET} geogram ${CUDA_TARGET}
        )
 
 if(CMAKE_INSTALL_PREFIX)
