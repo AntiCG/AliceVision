@@ -88,10 +88,10 @@ ExternalProject_Add(geogram
        BUILD_ALWAYS 0
        SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/geogram
        BINARY_DIR ${BUILD_DIR}/geogram_build
-       INSTALL_DIR ${BUILD_DIR}/geogram_install
+       INSTALL_DIR ${BUILD_DIR}/geogram_build
        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DVORPALINE_PLATFORM=${VORPALINE_PLATFORM} -DGEOGRAM_WITH_HLBFGS=OFF -DGEOGRAM_WITH_TETGEN=OFF -DGEOGRAM_WITH_GRAPHICS=OFF -DGEOGRAM_WITH_EXPLORAGRAM=OFF -DGEOGRAM_WITH_LUA=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
        )
-set(GEOGRAM_CMAKE_FLAGS -DGEOGRAM_INSTALL_PREFIX=${BUILD_DIR}/geogram_build -DGEOGRAM_INCLUDE_DIR=${BUILD_DIR}/geogram_install/include/geogram1)
+set(GEOGRAM_CMAKE_FLAGS -DGEOGRAM_INSTALL_PREFIX=${BUILD_DIR}/geogram_build -DGEOGRAM_INCLUDE_DIR=${BUILD_DIR}/geogram_build/include/geogram1)
 
 # Add Cuda
 if(AV_USE_CUDA AND AV_BUILD_CUDA)
@@ -132,6 +132,18 @@ ExternalProject_Add(eigen
        )
 set(EIGEN_CMAKE_FLAGS -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEIGEN3_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3 -DEIGEN_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3)
 
+ExternalProject_Add(suitesparse
+       URL https://github.com/jluttine/suitesparse/archive/v5.2.0.tar.gz
+       PREFIX ${BUILD_DIR}
+       BUILD_IN_SOURCE 0
+       BUILD_ALWAYS 0
+       SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/suitesparse
+       BINARY_DIR ${BUILD_DIR}/suitesparse_build
+       INSTALL_DIR ${BUILD_DIR}/suitesparse_build
+       CONFIGURE_COMMAND ""
+       BUILD_COMMAND make install INSTALL=<INSTALL_DIR>
+       )
+
 # Add ceres-solver: A Nonlinear Least Squares Minimizer
 ExternalProject_Add(ceres
        URL https://github.com/ceres-solver/ceres-solver/archive/1.13.0.tar.gz
@@ -142,7 +154,7 @@ ExternalProject_Add(ceres
        BINARY_DIR ${BUILD_DIR}/ceres_build
        INSTALL_DIR ${BUILD_DIR}/ceres_build
        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${DEPS_CMAKE_BUILD_TYPE} -DEigen3_DIR:PATH=${BUILD_DIR}/eigen_build/share/eigen3/cmake -DEIGEN_INCLUDE_DIR=${BUILD_DIR}/eigen_build/include/eigen3 -DMINIGLOG=ON -DBUILD_EXAMPLES:BOOL=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR> <SOURCE_DIR>
-       DEPENDS eigen
+       DEPENDS eigen suitesparse
        )
 # Test 32/64 bits
 if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND
@@ -292,7 +304,7 @@ ExternalProject_Add(alembic
 set(ALEMBIC_CMAKE_FLAGS -DAlembic_DIR:PATH=${BUILD_DIR}/alembic_build/lib/cmake/Alembic)
 
 set(AV_DEPS ${JPEG_TARGET} ${PNG_TARGET} boost openimageio openexr alembic geogram ${CUDA_TARGET} ceres)
-set(AV_DEPS_CMAKE_PREFIX_PATH "${BUILD_DIR}/boost_build;${BUILD_DIR}/openimageio_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/alembic_build;${BUILD_DIR}/geogram_install;${BUILD_DIR}/cuda_build;${BUILD_DIR}/ceres_build/lib64/cmake/Ceres;${BUILD_DIR}/alembic_build/lib/cmake/Alembic")
+set(AV_DEPS_CMAKE_PREFIX_PATH "${BUILD_DIR}/boost_build;${BUILD_DIR}/openimageio_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/openexr_build;${BUILD_DIR}/alembic_build;${BUILD_DIR}/geogram_build;${BUILD_DIR}/cuda_build;${BUILD_DIR}/ceres_build/lib64/cmake/Ceres;${BUILD_DIR}/alembic_build/lib/cmake/Alembic")
 
 ExternalProject_Add(aliceVision
        PREFIX ${CMAKE_CURRENT_SOURCE_DIR}
